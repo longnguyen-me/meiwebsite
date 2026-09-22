@@ -86,6 +86,17 @@ body{overflow:hidden}.desktop{position:fixed;inset:env(safe-area-inset-top) env(
 .calendar-nav{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:18px}.calendar-nav button{min-width:44px;min-height:44px}
 .calendar-grid{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:3px;text-align:center;font-size:12px}.calendar-grid b{padding-bottom:7px;font-size:10px}
 .calendar-day{min-height:37px;padding:6px 1px;background:#f3e4ec;border:1px solid #dfc3d0;display:flex;flex-direction:column;align-items:center;justify-content:center}.calendar-day.today{outline:2px solid #873a5b;outline-offset:-2px;font-weight:bold}.calendar-day.important{background:#ffd0df;color:#842546}.calendar-day span{font-size:10px}.calendar-events{padding-left:18px;color:#873a5b}#soundToggle{min-height:44px;padding:8px 14px}#song{overflow-wrap:anywhere}
+.celestial{width:96px;height:96px}
+.start-menu{width:min(250px,calc(100vw - 24px));max-height:calc(100dvh - var(--bar-height) - 16px);overflow-y:auto}
+.task-divider{height:36px;border-left:1px solid #777;border-right:1px solid white;flex:0 0 2px}
+.task-apps{min-width:0;flex:1;overflow-x:auto}
+.music-tools{display:flex;flex-wrap:wrap;align-items:center;gap:8px;margin-top:16px}.music-tools button{min-height:44px}.music-tools input[type=range]{min-width:80px;flex:1;width:110px}.playlist{list-style:none;padding:0;max-height:180px;overflow:auto;text-align:left}.playlist button{width:100%;min-height:44px;text-align:left;overflow-wrap:anywhere;padding:8px;border:1px solid #b59eab;background:#fff6fa}.playlist button[aria-current=true]{background:#f7bfd5;font-weight:bold}.music-status{font-size:11px;min-height:1.4em}
+.memory-detail{min-height:460px}.memory-detail .photo{height:360px;max-height:none}.memory-detail p{line-height:1.7}
+.pixel-cat{position:fixed;right:112px;bottom:calc(env(safe-area-inset-bottom) + 3px);width:80px;height:72px;z-index:101;pointer-events:none;image-rendering:pixelated}
+.bird-flock{position:absolute;left:-180px;top:var(--flight-top);width:150px;height:110px;z-index:3;animation:bird-flight var(--flight-duration) linear forwards;pointer-events:none}.pixel-bird{position:absolute;width:24px;height:20px;image-rendering:pixelated}.bird-wing{transform-origin:12px 10px;animation:bird-flap .6s steps(2,end) infinite}
+@keyframes bird-flight{to{translate:calc(100vw + 360px) -35px}}@keyframes bird-flap{50%{transform:scaleY(-1)}}
+@media(max-width:520px){.celestial{width:72px;height:72px}.memory-detail{min-height:380px}.memory-detail .photo{height:240px}.pixel-cat{width:60px;height:54px;right:88px}}
+@media(prefers-reduced-motion:reduce){.bird-flock{display:none}}
 </style>
 </head>
 <body>
@@ -129,12 +140,25 @@ const SONGS = [
   {"title":"La Vie En Rose.mp3","src":"music/La_Vie_En_Rose.mp3"}
 ];
 const audio=document.getElementById("audio"),play=document.getElementById("play"),song=document.getElementById("song"),disc=document.getElementById("disc");
+const musicTools=document.createElement('div');musicTools.className='music-tools';
+musicTools.innerHTML='<button type="button" id="volumeButton" aria-label="Mute music" aria-pressed="false">Volume</button><input id="volume" type="range" min="0" max="1" step="0.05" value="0.7" aria-label="Music volume"><button type="button" id="addSongs">Add songs</button><input id="songFiles" type="file" accept="audio/*,.mp3" multiple hidden>';
+const playlist=document.createElement('ol');playlist.className='playlist';playlist.setAttribute('aria-label','Playlist');
+const musicStatus=document.createElement('p');musicStatus.className='music-status';musicStatus.setAttribute('role','status');
+audio.before(musicTools,playlist,musicStatus);
+function renderPlaylist(){playlist.replaceChildren();SONGS.forEach((entry,index)=>{const li=document.createElement('li'),button=document.createElement('button');button.type='button';button.textContent=entry.title;button.setAttribute('aria-current',String(index===songIndex));button.onclick=()=>{++playbackRequest;audio.pause();loadSong(index);startMusic()};li.append(button);playlist.append(li)})}
+const volume=document.getElementById('volume'),volumeButton=document.getElementById('volumeButton');audio.volume=.7;
+volume.oninput=()=>{audio.volume=Number(volume.value);audio.muted=false;volumeButton.setAttribute('aria-pressed','false');volumeButton.setAttribute('aria-label','Mute music')};
+volumeButton.onclick=()=>{audio.muted=!audio.muted;volumeButton.setAttribute('aria-pressed',String(audio.muted));volumeButton.setAttribute('aria-label',audio.muted?'Unmute music':'Mute music')};
+const songFiles=document.getElementById('songFiles');document.getElementById('addSongs').onclick=()=>songFiles.click();
+songFiles.onchange=()=>{for(const file of songFiles.files){if(file.type.startsWith('audio/')||/\.mp3$/i.test(file.name))SONGS.push({title:file.name,src:URL.createObjectURL(file),temporary:true})}renderPlaylist();musicStatus.textContent='Added songs are available until this page closes.';songFiles.value=''};
+addEventListener('pagehide',event=>{if(!event.persisted)SONGS.filter(s=>s.temporary).forEach(s=>URL.revokeObjectURL(s.src))});
 let songIndex=0, playbackRequest=0;
 function loadSong(index){
   if(!SONGS.length){song.textContent="No songs yet";return false}
   songIndex=(index+SONGS.length)%SONGS.length;
   audio.src=SONGS[songIndex].src;
   song.textContent=SONGS[songIndex].title;
+  musicStatus.textContent='';renderPlaylist();
   return true;
 }
 async function startMusic(){
@@ -142,6 +166,7 @@ async function startMusic(){
   try{await audio.play()}catch(error){
     if(request!==playbackRequest || error.name==="AbortError")return;
     song.dataset.status=error.name==="NotAllowedError" ? "Tap Play to start" : "Song unavailable — try the next track";
+    musicStatus.textContent=song.dataset.status;
   }
 }
 function skipSong(direction){++playbackRequest;audio.pause();if(loadSong(songIndex+direction))startMusic()}
@@ -151,7 +176,7 @@ document.getElementById("songNext").onclick=()=>skipSong(1);
 audio.onended=()=>skipSong(1);
 audio.onplay=()=>{song.textContent=SONGS[songIndex].title;play.textContent="Ⅱ Pause";play.setAttribute("aria-label","Pause music");disc.classList.add("playing")};
 audio.onpause=()=>{play.textContent="▶ Play";play.setAttribute("aria-label","Play music");disc.classList.remove("playing")};
-audio.onerror=()=>{song.title="Song unavailable — try the next track"};
+audio.onerror=()=>{musicStatus.textContent="Song unavailable — try the next track"};
 if(loadSong(0))startMusic();
 // Safari starts audible music from a direct tap; the main entry button supplies it.
 document.querySelector('.hero .pixel-button').addEventListener('click',()=>{if(audio.paused&&SONGS.length)startMusic()});
@@ -213,24 +238,15 @@ const APPS=[
  {id:"anniversary",name:"Anniversary",title:"Anniversary.exe",icon:"heart",width:700,initialOpen:true},
  {id:"timeline",name:"Memories",title:"memory_log.exe",icon:"folder",width:710},
  {id:"notes",name:"Love notes",title:"notes_for_you.txt",icon:"letter",width:580},
- {id:"music",name:"Music",title:"songs_that_reminds_me_of_you",icon:"music",width:360},
+ {id:"music",name:"Music",title:"songs_that_reminds_me_of_you",icon:"music",width:460},
  {id:"reminder",name:"Reminder",title:"tiny_reminder.txt",icon:"note",width:320},
  {id:'calendar',name:'Calendar',title:'Calendar.exe',icon:'calendar',width:430,render:renderCalendar,onOpen({element}){renderCalendar(element.querySelector('.body'))}},
  {id:'settings',name:'Setting',title:'Setting.exe',icon:'settings',width:350,desktop:false,startRoot:true,render(body){const button=document.createElement('button');button.id='soundToggle';button.type='button';body.append(button)}}
 ];
 const desktop=document.querySelector('.desktop'),shortcuts=document.getElementById('shortcuts'),taskApps=document.getElementById('taskApps'),startMenu=document.getElementById('startMenu'),startButton=document.getElementById('startButton');
 const apps=new Map();let topLayer=0,activeId=null;
-const programGroup=document.createElement('div');programGroup.className='program-group';
-const programButton=document.createElement('button');programButton.type='button';programButton.className='start-item';programButton.textContent='▣  Program  ▸';programButton.setAttribute('aria-expanded','false');programButton.setAttribute('aria-controls','programMenu');
-const programMenu=document.createElement('div');programMenu.id='programMenu';programMenu.className='program-menu';programMenu.hidden=true;
-programGroup.append(programButton,programMenu);startMenu.append(programGroup);
+const divider=document.createElement('span');divider.className='task-divider';divider.setAttribute('aria-hidden','true');startButton.after(divider);
 const greeting=document.createElement('div');greeting.className='start-greeting';greeting.textContent='Hello, Mei!';startMenu.append(greeting);
-function showPrograms(show){programMenu.hidden=!show;programButton.setAttribute('aria-expanded',String(show));startMenu.style.minHeight=show?(programMenu.offsetHeight+4)+'px':''}
-programButton.onclick=()=>showPrograms(programMenu.hidden);
-programGroup.addEventListener('pointerenter',e=>{if(e.pointerType==='mouse')showPrograms(true)});
-programGroup.addEventListener('pointerleave',e=>{if(e.pointerType==='mouse')showPrograms(false)});
-programButton.addEventListener('keydown',e=>{if(e.key==='ArrowRight'){e.preventDefault();showPrograms(true);programMenu.querySelector('button')?.focus()}});
-programMenu.addEventListener('keydown',e=>{if(e.key==='ArrowLeft'){e.preventDefault();showPrograms(false);programButton.focus()}});
 function iconFor(key){const span=document.createElement('span');span.className='app-icon';span.setAttribute('aria-hidden','true');span.innerHTML='<svg viewBox="0 0 32 32" shape-rendering="crispEdges"><g stroke="#69425e" stroke-width="1.5">'+(ICONS[key]||ICONS.folder)+'</g></svg>';return span}
 function appButton(app,className){const button=document.createElement('button');button.type='button';button.className=className;button.append(iconFor(app.icon));const label=document.createElement('span');label.textContent=app.name;button.append(label);button.setAttribute('aria-controls',app.id);button.onclick=()=>openWindow(app.id);return button}
 function fitWindow(record,x,y){
@@ -246,7 +262,7 @@ function focusWindow(id){
  activeId=id;record.element.style.zIndex=++topLayer;
  for(const [key,r] of apps){r.element.classList.toggle('active',key===id);if(r.task)r.task.setAttribute('aria-pressed',String(key===id))}
 }
-function menuVisible(show){startMenu.hidden=!show;startButton.setAttribute('aria-expanded',String(show));if(!show)showPrograms(false)}
+function menuVisible(show){startMenu.hidden=!show;startButton.setAttribute('aria-expanded',String(show))}
 function openWindow(id){
  const record=apps.get(id);if(!record)return;
  menuVisible(false);const wasClosed=record.element.hidden;record.element.hidden=false;
@@ -271,7 +287,7 @@ function registerApp(app){
  const title=el.querySelector('.title'),heading=title.querySelector('b');heading.textContent=app.title||app.name;heading.id=app.id+'-title';el.setAttribute('aria-labelledby',heading.id);title.tabIndex=0;title.setAttribute('aria-label',(app.title||app.name)+'. Drag to move; arrow keys move the window.');
  const content=document.createElement('div');content.className='window-content';while(title.nextSibling)content.append(title.nextSibling);el.append(content);
  const shortcut=appButton(app,'shortcut');shortcut.setAttribute('aria-expanded','false');if(app.desktop!==false)shortcuts.append(shortcut);
- if(app.startMenu!==false){const entry=appButton(app,'start-item');if(app.startRoot)startMenu.insertBefore(entry,greeting);else programMenu.append(entry)}
+ if(app.startMenu!==false){const entry=appButton(app,'start-item');startMenu.insertBefore(entry,greeting)}
  const record={app,element:el,title,shortcut,task:null};apps.set(app.id,record);
  const close=document.createElement('button');close.className='close-window';close.type='button';close.textContent='×';close.setAttribute('aria-label','Close '+app.name);close.onclick=()=>closeWindow(app.id);title.append(close);
  el.addEventListener('pointerdown',()=>focusWindow(app.id));el.addEventListener('focusin',()=>{if(activeId!==app.id)focusWindow(app.id)});
@@ -289,7 +305,7 @@ function resizeDesktop(){document.documentElement.style.setProperty('--bar-heigh
 resizeDesktop();APPS.forEach(registerApp);
 MEMORIES.forEach((memory,index)=>{
  const id='memory-'+(index+1),card=track.children[index];
- registerApp({id,name:memory.title,title:'Chapter '+String(index+1).padStart(2,'0')+'.exe',icon:'heart',width:520,desktop:false,startMenu:false,render(body){
+ registerApp({id,name:memory.title,title:'Chapter '+String(index+1).padStart(2,'0')+'.exe',icon:'heart',width:820,desktop:false,startMenu:false,render(body){
   body.classList.add('memory-detail');body.append(card.querySelector('.photo').cloneNode(true));
   const title=document.createElement('h2'),date=document.createElement('p'),description=document.createElement('p');title.textContent=memory.title;date.textContent=memory.date;description.textContent=memory.description;body.append(title,date,description);
  }});
@@ -307,16 +323,43 @@ for(const link of document.querySelectorAll('a[href^="#"]'))link.addEventListene
 // Customize these hours and the palette stops below through ChatGPT.
 const SKY={sunrise:6,sunset:18};
 const CLOUD_SHAPES=[
+ '0 25%,8% 25%,8% 45%,18% 45%,18% 35%,60% 35%,60% 10%,68% 10%,68% 0,78% 0,78% 15%,90% 15%,90% 30%,100% 30%,100% 50%,84% 50%,84% 80%,76% 80%,76% 100%,66% 100%,66% 65%,34% 65%,34% 100%,22% 100%,22% 70%,12% 70%,12% 50%,0 50%',
  '0 50%,12% 50%,12% 25%,28% 25%,28% 0,64% 0,64% 25%,82% 25%,82% 50%,100% 50%,100% 100%,0 100%',
  '0 60%,10% 60%,10% 35%,20% 35%,20% 15%,40% 15%,40% 0,62% 0,62% 35%,83% 35%,83% 60%,100% 60%,100% 100%,0 100%',
  '0 55%,15% 55%,15% 25%,35% 25%,35% 0,55% 0,55% 25%,70% 25%,70% 45%,90% 45%,90% 65%,100% 65%,100% 100%,0 100%',
  '0 50%,8% 50%,8% 25%,30% 25%,30% 50%,40% 50%,40% 10%,65% 10%,65% 30%,85% 30%,85% 60%,100% 60%,100% 100%,0 100%',
  '0 65%,12% 65%,12% 40%,32% 40%,32% 15%,48% 15%,48% 0,70% 0,70% 35%,88% 35%,88% 65%,100% 65%,100% 100%,0 100%'
 ];
-// Shuffle all five shapes so each appears; randomize sizes, spacing and speeds.
+// Shuffle the cloud silhouettes, including the dog, on each visit.
 const cloudOrder=CLOUD_SHAPES.map((_,i)=>i);
 for(let i=cloudOrder.length-1;i>0;i--){const j=Math.floor(Math.random()*(i+1));[cloudOrder[i],cloudOrder[j]]=[cloudOrder[j],cloudOrder[i]]}
-cloudOrder.forEach((shape,i)=>{const cloud=document.createElement('div');cloud.className='pixel-cloud';cloud.style.clipPath='polygon('+CLOUD_SHAPES[shape]+')';const duration=65+Math.random()*45;for(const [key,value] of Object.entries({'--cloud-width':(120+Math.floor(Math.random()*90))+'px','--cloud-height':(36+Math.floor(Math.random()*22))+'px','--cloud-top':(12+i*12+Math.random()*6)+'%','--duration':duration+'s','--delay':(-duration*(i+.3)/5)+'s','--rest-left':(i*20-5)+'%'}))cloud.style.setProperty(key,value);document.getElementById('cloudLayer').append(cloud)});
+cloudOrder.forEach((shape,i)=>{const cloud=document.createElement('div');cloud.className='pixel-cloud';cloud.style.clipPath='polygon('+CLOUD_SHAPES[shape]+')';const duration=65+Math.random()*45,isDog=shape===0,width=isDog?170+Math.floor(Math.random()*45):120+Math.floor(Math.random()*90),height=isDog?68+Math.floor(Math.random()*18):36+Math.floor(Math.random()*22);for(const [key,value] of Object.entries({'--cloud-width':width+'px','--cloud-height':height+'px','--cloud-top':(12+i*12+Math.random()*6)+'%','--duration':duration+'s','--delay':(-duration*(i+.3)/CLOUD_SHAPES.length)+'s','--rest-left':(i*20-5)+'%'}))cloud.style.setProperty(key,value);document.getElementById('cloudLayer').append(cloud)});
+const wallpaper=document.querySelector('.wallpaper'),motionOK=!matchMedia("(prefers-reduced-motion: reduce)").matches;
+function birdMarkup(){return '<svg viewBox="0 0 24 20" shape-rendering="crispEdges" aria-hidden="true"><g class="bird-wing"><path fill="#4b3454" d="M2 8h5v2h3v2H7v2H2v-2H0v-2h2zM14 8h5v2h3v2h-3v2h-5v-2h-3v-2h3z"/></g><path fill="#7b4b72" d="M8 9h8v3H8zM16 10h3v2h-3z"/><path fill="#f2d78a" d="M19 10h3v1h-3z"/></svg>'}
+function launchBirds(){
+ if(document.hidden||!motionOK)return scheduleBirds();
+ const flock=document.createElement('div'),vPattern=Math.random()<.38,positions=vPattern?[[0,44],[30,26],[60,44],[90,26],[120,44]]:[[0,26]];
+ flock.className='bird-flock';flock.style.setProperty('--flight-top',(12+Math.random()*34)+'%');flock.style.setProperty('--flight-duration',(13+Math.random()*7)+'s');
+ positions.forEach(([left,top])=>{const bird=document.createElement('span');bird.className='pixel-bird';bird.style.left=left+'px';bird.style.top=top+'px';bird.innerHTML=birdMarkup();flock.append(bird)});
+ wallpaper.append(flock);flock.addEventListener('animationend',()=>flock.remove(),{once:true});scheduleBirds();
+}
+function scheduleBirds(){setTimeout(launchBirds,8000+Math.random()*18000)}
+if(motionOK)scheduleBirds();
+const cat=document.createElement('canvas');cat.className='pixel-cat';cat.width=40;cat.height=36;cat.setAttribute('aria-hidden','true');document.body.append(cat);
+const catCtx=cat.getContext('2d');
+function drawCat(frame){
+ if(!catCtx)return;
+ catCtx.clearRect(0,0,40,36);
+ const r=(x,y,w,h,color)=>{catCtx.fillStyle=color;catCtx.fillRect(x,y,w,h)};
+ const tailUp=frame%2===0,blink=frame%10===0,paw=frame%4<2;
+ r(16,9,12,3,'#c96a22');r(13,12,19,12,'#e9822d');r(10,22,22,8,'#d87328');r(12,30,18,3,'#9b471d');
+ r(14,7,4,5,'#e9822d');r(26,7,4,5,'#e9822d');r(15,9,2,2,'#ffd29b');r(27,9,2,2,'#ffd29b');
+ r(15,14,3,blink?1:3,'#3b2630');r(25,14,3,blink?1:3,'#3b2630');r(20,17,3,2,'#7b3b2c');r(18,20,2,1,'#fff2d8');r(23,20,2,1,'#fff2d8');
+ r(16,24,4,5,'#ffae4d');r(24,24,4,5,'#ffae4d');r(16,29,4,1,paw?'#fff2d8':'#ffae4d');r(24,29,4,1,paw?'#ffae4d':'#fff2d8');
+ if(tailUp){r(30,13,4,4,'#c96a22');r(33,9,4,7,'#e9822d');r(36,8,3,3,'#c96a22')}else{r(30,19,7,4,'#c96a22');r(35,16,3,4,'#e9822d')}
+ r(18,11,2,2,'#ffae4d');r(23,11,2,2,'#ffae4d');r(18,26,10,2,'#c96a22');
+}
+let catFrame=0;drawCat(catFrame);if(motionOK)setInterval(()=>drawCat(++catFrame),200);
 const SKY_PALETTES=[
  [0, ['#171b48','#45305f','#82557f']],
  [5, ['#393968','#99628d','#e9a497']],
