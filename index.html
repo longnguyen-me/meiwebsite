@@ -208,7 +208,7 @@ const ICONS={
 const EXPLORER_DESCRIPTIONS={
 };
 const EXPLORER_FOLDERS=[
- {id:'pics',label:'Pics',type:'image',icon:'image',extensions:['png','jpg','jpeg','gif','webp','svg']},
+ {id:'pics',label:'Pics',type:'image',icon:'image',extensions:['png','jpg','jpeg','gif','webp','svg','heic','heif']},
  {id:'vids',label:'Vids',type:'video',icon:'video',extensions:['mp4','webm','mov','m4v']},
  {id:'notes',label:'Notes',type:'document',icon:'note',extensions:['txt','md','me']}
 ];
@@ -261,12 +261,30 @@ function renderExplorer(body){
   if(!files.children.length){const empty=document.createElement('p');empty.className='explorer-missing';empty.textContent='No matching files found in '+explorerFolder+' yet.';files.append(empty)}
  }).catch(error=>{files.replaceChildren();const fail=document.createElement('p');fail.className='explorer-missing';fail.textContent=error.message;files.append(fail)});
 }
+function explorerDescription(item){return EXPLORER_DESCRIPTIONS[item.path]||EXPLORER_DESCRIPTIONS[item.name]||'Add a description in EXPLORER_DESCRIPTIONS for '+item.path+'.'}
+let heicConverterPromise=null;
+function loadHeicConverter(){
+ if(window.heic2any)return Promise.resolve(window.heic2any);
+ if(heicConverterPromise)return heicConverterPromise;
+ heicConverterPromise=new Promise((resolve,reject)=>{const script=document.createElement('script');script.src='https://cdn.jsdelivr.net/npm/heic2any@0.0.4/dist/heic2any.min.js';script.onload=()=>window.heic2any?resolve(window.heic2any):reject(new Error('HEIC converter did not load.'));script.onerror=()=>reject(new Error('HEIC converter could not load.'));document.head.append(script)});
+ return heicConverterPromise;
+}
+async function renderHeicPreview(item,img,status){
+ status.textContent='Converting HEIC preview...';
+ try{
+  const heic2any=await loadHeicConverter(),response=await fetch(item.src);
+  if(!response.ok)throw new Error('Could not load HEIC file.');
+  const source=await response.blob(),converted=await heic2any({blob:source,toType:'image/jpeg',quality:.92});
+  const jpeg=Array.isArray(converted)?converted[0]:converted;
+  img.src=URL.createObjectURL(jpeg);status.textContent='';
+ }catch(error){status.textContent='This browser could not preview the HEIC. Export this picture as JPG or PNG for guaranteed display.'}
+}
 function openExplorerItem(item){
  const id='explorer-'+item.folder+'-'+item.name.toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-|-$/g,'');
  if(!apps.has(id))registerApp({id,name:item.name,title:item.name,icon:item.type==='image'?'image':item.type==='video'?'video':'note',width:item.type==='document'?560:780,desktop:false,startMenu:false,render(body){
   body.classList.add('explorer-preview');
   const heading=document.createElement('h2');heading.textContent=item.name;const info=document.createElement('p');info.textContent=item.path||('Explorer > '+item.folder+' > '+item.name);body.append(heading,info);
-  if(item.type==='image'){const date=document.createElement('p'),description=document.createElement('p'),img=document.createElement('img');date.textContent='Date: '+item.name;description.textContent=EXPLORER_DESCRIPTIONS[item.path]||'Add a description in EXPLORER_DESCRIPTIONS for '+item.path+'.';description.className='explorer-description';img.src=item.src;img.alt=item.name;img.onerror=()=>{const miss=document.createElement('div');miss.className='explorer-missing';miss.textContent='Image not found yet. Add it at '+item.src+' and keep the filename exactly the same.';img.replaceWith(miss)};body.append(date,description,img)}
+  if(item.type==='image'){const date=document.createElement('p'),description=document.createElement('p'),status=document.createElement('p'),img=document.createElement('img');date.textContent='Date: '+item.name;description.textContent=explorerDescription(item);description.className='explorer-description';status.className='explorer-missing';status.hidden=true;img.alt=item.name;img.onerror=()=>{const miss=document.createElement('div');miss.className='explorer-missing';miss.textContent='Image not found yet or this browser cannot display its file type. Add it at '+item.src+' and keep the filename exactly the same.';img.replaceWith(miss)};body.append(date,description,status,img);if(['heic','heif'].includes(ext(item.name))){status.hidden=false;renderHeicPreview(item,img,status)}else img.src=item.src}
   else if(item.type==='video'){const video=document.createElement('video');video.src=item.src;video.controls=true;video.playsInline=true;video.onerror=()=>{const miss=document.createElement('div');miss.className='explorer-missing';miss.textContent='Video not found yet. Add it at '+item.src+' and keep the filename exactly the same.';video.replaceWith(miss)};body.append(video)}
   else{const pre=document.createElement('pre');pre.textContent='Loading note...';body.append(pre);fetch(item.src).then(response=>response.ok?response.text():Promise.reject()).then(text=>{pre.textContent=text}).catch(()=>{pre.textContent='Note could not be loaded.'})}
  }});
@@ -286,6 +304,12 @@ function renderSafe(body){
  [['cloud','x5'],['paw','x6'],['disc','x3'],['settings','x1']].forEach(([icon,count])=>{const clue=document.createElement('span');clue.className='hint-item';clue.append(iconFor(icon),document.createTextNode(count));row.append(clue)});
  hint.append(label,row);
  body.append(title,display,pad,message,hint);update();
+}
+function renderReadMe(body){
+ body.replaceChildren();
+ const heading=document.createElement('h2'),pre=document.createElement('pre');
+ heading.textContent='read.me';pre.textContent='Loading note...';body.append(heading,pre);
+ fetch('notes/read.me').then(response=>response.ok?response.text():Promise.reject()).then(text=>{pre.textContent=text}).catch(()=>{pre.textContent='Hello my love, instead of writing a traditional note this year for anniversary. I want to create something that will last along time. It also allow me to do much more things than just a pen and paper. I hope you enjoy this little website i design for you. Ahem chatgpt build it. Nevertheless happy anniversary! <3'});
 }
 const IMPORTANT_DATES=[{month:9,day:29,title:'Anniversary',startYear:2026},{month:8,day:31,title:'Birthday'}];
 let calendarOffset=0,calendarDay='';
@@ -319,6 +343,7 @@ const APPS=[
  {id:"anniversary",name:"Anniversary",title:"Anniversary.exe",icon:"heart",width:700,initialOpen:true},
  {id:"explorer",name:"Explorer",title:"Explorer.exe",icon:"folder",width:760,render:renderExplorer,onOpen({element}){renderExplorer(element.querySelector('.body'))}},
  {id:"safe",name:"Safe",title:"Safe.exe",icon:"safe",width:420,render:renderSafe},
+ {id:"readme",name:"Read.me",title:"read.me",icon:"note",width:560,render:renderReadMe,onOpen({element}){renderReadMe(element.querySelector('.body'))}},
  {id:"notes",name:"Love notes",title:"notes_for_you.txt",icon:"letter",width:580},
  {id:"music",name:"Music",title:"songs_that_reminds_me_of_you",icon:"music",width:460},
  {id:"reminder",name:"Reminder",title:"tiny_reminder.txt",icon:"note",width:320},
