@@ -220,8 +220,39 @@ const ICONS={
 };
 // Explorer auto-reads public GitHub Pages folders: pics/, vids/, and notes/.
 // Add files to those folders in GitHub; no filename list is needed here.
-// To add picture descriptions, put "pics/filename.png": "Description here" in this map.
+// To add picture descriptions, put a filename, date-style name, or full pics/path here.
 const EXPLORER_DESCRIPTIONS={
+ "12/24/2024 (2)":"Beautiful girl at botanical garden",
+ "05/17/2025_2":"Monkey lion meme",
+ "05/17/2025":"Florida trippy",
+ "07/31/2025":"Amicalola fall",
+ "10/04/2022":"first ever mall date",
+ "6/1/23":"Leo first time home",
+ "5/23/2023":"pretty dress on the prettiest girl",
+ "5/26/2023":"florida trip with family",
+ "2/14/23":"snorting cocaine",
+ "2/14/23_2":"cakey",
+ "12/24/2024":"botanical garden lights",
+ "12/24/24_2":"us <3",
+ "12/22/24":"christkindl market",
+ "12/24/24_3":"Beautfiul girl at botanical pt2",
+ "11_23_22":"mall date under tree",
+ "12/22/24_2":"buckhead date, forogt resutrant",
+ "6/11/24":"aquarium date!!",
+ "11/23/22_2":"puppy mall date",
+ "11/13/22":"I think you look really pretty here",
+ "11/23/2022/3":"mei's first jinya ramen",
+ "09/29/2024":"2nd ani",
+ "07/12/26":"random girl",
+ "8/04/2026":"savannah trip",
+ "10/30/2022":"cold car sleep",
+ "09/08/2024":"suppppaaaaaaa gorgeousss",
+ "09/09/2024":"beach trip in sc",
+ "08/31/2024":"giftbox for my girl",
+ "9/25/24":"porter robinson concert",
+ "6/4/2026":"food before soccer",
+ "6/9/26":"cute nugget showdown",
+ "08/25/2024":"Helen trip"
 };
 const EXPLORER_FOLDERS=[
  {id:'pics',label:'Pics',type:'image',icon:'image',extensions:['png','jpg','jpeg','gif','webp','svg','heic','heif']},
@@ -238,6 +269,8 @@ function githubPagesRepo(){
  return {owner,repo:project||owner+'.github.io',base:project?parts.slice(1).join('/'):parts.join('/')};
 }
 function ext(name){return name.split('.').pop().toLowerCase()}
+function nameWithoutExtension(name){return name.replace(/\.[^.]+$/,'')}
+function descriptionKey(value){return String(value||'').replace(/^pics\//i,'').replace(/\.[^.]+$/,'').toLowerCase().replace(/[^a-z0-9]+/g,'')}
 async function loadExplorerFiles(){
  if(explorerCache)return explorerCache;
  if(explorerLoading)return explorerLoading;
@@ -277,7 +310,13 @@ function renderExplorer(body){
   if(!files.children.length){const empty=document.createElement('p');empty.className='explorer-missing';empty.textContent='No matching files found in '+explorerFolder+' yet.';files.append(empty)}
  }).catch(error=>{files.replaceChildren();const fail=document.createElement('p');fail.className='explorer-missing';fail.textContent=error.message;files.append(fail)});
 }
-function explorerDescription(item){return EXPLORER_DESCRIPTIONS[item.path]||EXPLORER_DESCRIPTIONS[item.name]||'Add a description in EXPLORER_DESCRIPTIONS for '+item.path+'.'}
+function explorerDescription(item){
+ const direct=EXPLORER_DESCRIPTIONS[item.path]||EXPLORER_DESCRIPTIONS[item.name]||EXPLORER_DESCRIPTIONS[nameWithoutExtension(item.name)];
+ if(direct)return direct;
+ const itemKeys=new Set([descriptionKey(item.path),descriptionKey(item.name),descriptionKey(nameWithoutExtension(item.name))]);
+ for(const [key,value] of Object.entries(EXPLORER_DESCRIPTIONS))if(itemKeys.has(descriptionKey(key)))return value;
+ return 'No description yet.';
+}
 let heicConverterPromise=null;
 function loadHeicConverter(){
  if(window.heic2any)return Promise.resolve(window.heic2any);
